@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Market Maker: The Struggle</title>
+<title>Market Maker: Active Warfare</title>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
     body { margin: 0; background: #0b0e11; color: #c9d1d9; font-family: 'Roboto Mono', monospace; overflow-y: auto; -webkit-tap-highlight-color: transparent; }
@@ -19,14 +19,11 @@
     .bar-label-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
     .bar-bg { width: 100%; height: 10px; background: #21262d; border-radius: 4px; overflow: hidden; position: relative; }
     
-    /* Supply Bar (Bad) */
-    .fill-supply { height: 100%; background: #da3633; width: 50%; transition: width 0.5s ease-out; }
-    /* FOMO Bar (Good) */
-    .fill-fomo { height: 100%; background: #238636; width: 0%; transition: width 0.5s ease-out; box-shadow: 0 0 10px #238636; }
+    /* Colors */
+    .fill-supply { height: 100%; background: #da3633; width: 50%; transition: width 0.3s ease-out; }
+    .fill-fomo { height: 100%; background: #238636; width: 0%; transition: width 0.3s ease-out; }
 
-    .stats-grid {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
-    }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
     .stat-card {
         background: #161b22; padding: 10px; border: 1px solid #30363d; border-radius: 6px;
         display: flex; flex-direction: column; justify-content: space-between;
@@ -42,7 +39,7 @@
     button {
         padding: 18px 5px; border: none; border-radius: 6px; font-weight: 700; font-family: inherit; font-size: 14px;
         cursor: pointer; color: #fff; transition: transform 0.1s;
-        border-bottom: 4px solid rgba(0,0,0,0.2);
+        border-bottom: 4px solid rgba(0,0,0,0.2); position: relative; overflow: hidden;
     }
     button:active { transform: translateY(2px); border-bottom: 1px solid rgba(0,0,0,0.2); }
     
@@ -52,34 +49,37 @@
 
     #log { font-size: 10px; color: #8b949e; text-align: center; margin-top: 10px; height: 20px; }
     
-    .mania-active { animation: pulse 1s infinite; border: 2px solid #fff; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(35, 134, 54, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(35, 134, 54, 0); } 100% { box-shadow: 0 0 0 0 rgba(35, 134, 54, 0); } }
+    /* Feedback Animations */
+    @keyframes flashGreen { 0% { background-color: #238636; } 100% { background-color: #21262d; } }
+    @keyframes flashRed { 0% { background-color: #da3633; } 100% { background-color: #21262d; } }
+    .flash-g { animation: flashGreen 0.5s; }
+    .flash-r { animation: flashRed 0.5s; }
 </style>
 </head>
 <body>
 
 <div class="wrapper">
     <div class="header">
-        <h3>LIQUIDITY WARS</h3>
-        <div class="status-text" id="status-text">MARKET QUIET</div>
+        <h3>Liquidity Wars v3</h3>
+        <div class="status-text" id="status-text">WAITING FOR PUMP...</div>
     </div>
 
     <div class="bar-container">
         <div class="bar-label-row">
-            <span class="stat-label">FLOATING SUPPLY (SELLERS)</span>
-            <span class="stat-val" style="font-size:12px" id="val-supply">50%</span>
+            <span class="stat-label">SELLING PRESSURE (SUPPLY)</span>
+            <span class="stat-val" id="val-supply">20%</span>
         </div>
-        <div class="bar-bg">
+        <div class="bar-bg" id="bg-supply">
             <div class="fill-supply" id="bar-supply"></div>
         </div>
     </div>
 
     <div class="bar-container">
         <div class="bar-label-row">
-            <span class="stat-label">RETAIL FOMO (TARGET)</span>
-            <span class="stat-val" style="font-size:12px" id="val-fomo">0%</span>
+            <span class="stat-label">BUYING PRESSURE (FOMO)</span>
+            <span class="stat-val" id="val-fomo">0%</span>
         </div>
-        <div class="bar-bg">
+        <div class="bar-bg" id="bg-fomo">
             <div class="fill-fomo" id="bar-fomo"></div>
         </div>
     </div>
@@ -99,15 +99,15 @@
 
     <div class="controls">
         <button class="btn-dump" onclick="actionDump()">
-            DUMP (SHAKEOUT)
-            <span class="sub-btn">Scare Sellers (-Supply)</span>
+            DUMP
+            <span class="sub-btn">Kill Supply / Cheap entry</span>
         </button>
         <button class="btn-pump" onclick="actionPump()">
-            PUMP (MARK UP)
-            <span class="sub-btn">Raise Price (+Supply)</span>
+            PUMP
+            <span class="sub-btn">Ignite FOMO / Raise Price</span>
         </button>
     </div>
-    <div id="log">...</div>
+    <div id="log">Start buying to wake them up...</div>
 </div>
 
 <script>
@@ -115,14 +115,13 @@
 let balanceUSD = 1000000;
 let balanceBTC = 50;
 let price = 1000;
-const START_PRICE = 1000;
 
-// GAME STATE
-let floatingSupply = 0.50; // 50% start
-let fomoLevel = 0.0;       // 0 to 1.0
-let isManiaMode = false;   // The Win State
+// GAME VARIABLES
+let supply = 0.20;    // Starts low (20%), grows with price
+let fomo = 0.0;       // Starts at 0, grows ONLY with Pumps
+let isMania = false;
 
-// CHART
+// CHART SETUP
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
     layout: { background: { color: '#0d1117' }, textColor: '#8b949e' },
     grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
@@ -132,7 +131,6 @@ const chart = LightweightCharts.createChart(document.getElementById('chart'), {
 const candleSeries = chart.addCandlestickSeries({
     upColor: '#238636', downColor: '#da3633', borderVisible: false, wickUpColor: '#238636', wickDownColor: '#da3633'
 });
-
 let currentBar = { time: Math.floor(Date.now()/1000), open: price, high: price, low: price, close: price };
 candleSeries.update(currentBar);
 
@@ -144,122 +142,122 @@ function updateLog(msg, color) {
     if(color) el.style.color = color;
 }
 
-// THE CORE LOOP (1 Second Tick)
+function flashBar(id, type) {
+    const el = document.getElementById(id);
+    el.classList.remove('flash-g', 'flash-r');
+    void el.offsetWidth; // trigger reflow
+    el.classList.add(type === 'good' ? 'flash-g' : 'flash-r');
+}
+
+// THE HEARTBEAT (1 sec)
 function tick() {
     const now = Math.floor(Date.now()/1000);
     
-    // 1. MANIA MODE (Auto-Win logic)
-    if(isManiaMode) {
-        // Толпа покупает у тебя сама!
-        const autoBuy = 2; // BTC
-        if(balanceBTC >= autoBuy) {
-            balanceBTC -= autoBuy;
-            balanceUSD += autoBuy * price;
-            // Цена растет сама по инерции
-            price += price * 0.01;
-            updateLog("MANIA MODE! RETAIL IS BUYING EVERYTHING!", "#238636");
-        } else {
-            isManiaMode = false;
-            updateLog("Sold out! Mania ended.", "#8b949e");
+    // 1. MANIA CHECK
+    if(fomo >= 1.0) isMania = true;
+    if(fomo < 0.8) isMania = false;
+
+    if(isMania) {
+        // --- MANIA MODE: Retail buys aggressively ---
+        price += price * 0.015; // Auto growth
+        
+        // Retail buys YOUR bags automatically (if you have BTC)
+        if(balanceBTC > 0.5) {
+            let sold = 0.5;
+            balanceBTC -= sold;
+            balanceUSD += sold * price;
         }
-        fomoLevel -= 0.05; // Mania burns out
-        if(fomoLevel <= 0) isManiaMode = false;
+        fomo -= 0.02; // Mania burns out fast
     } 
     else {
-        // 2. NORMAL MARKET PHYSICS
+        // --- NORMAL MARKET PHYSICS ---
         
-        // PASSIVE SUPPLY REGEN (Sellers return if boring)
-        if(floatingSupply < 0.8) {
-            floatingSupply += 0.005; 
+        // DECAY: FOMO cools down if you don't pump
+        if(fomo > 0) fomo -= 0.02; 
+        
+        // SUPPLY CREEP: If price is high, sellers slowly appear
+        if(price > 1200 && supply < 1.0) {
+            supply += 0.01; 
         }
 
-        // FOMO CALCULATION
-        // FOMO grows if: Price is High AND Supply is Low
-        const priceGain = (price - START_PRICE) / START_PRICE; // e.g. 0.10 (10%)
+        // BATTLE: Demand (FOMO) vs Supply
+        // If FOMO (0.6) > Supply (0.4) => Price moves UP
+        // If FOMO (0.2) < Supply (0.5) => Price moves DOWN
         
-        if (priceGain > 0.05 && floatingSupply < 0.3) {
-            fomoLevel += 0.02;
-            updateLog("FOMO building... Keep Supply low!", "#d29922");
-        } else {
-            // FOMO decays if Supply is high (Fear/Resistance)
-            fomoLevel -= 0.01;
-            if(fomoLevel > 0) updateLog("FOMO dying... Too many sellers!", "#8b949e");
-        }
-
-        // Trigger MANIA
-        if(fomoLevel >= 1.0 && !isManiaMode) {
-            isManiaMode = true;
-            document.body.style.background = "#0f1e13"; // Green tint
-        }
+        let sentimentDiff = fomo - supply; 
+        let movePercent = sentimentDiff * 0.01; // 1% impact max per tick
+        
+        price += price * movePercent;
     }
 
-    // Clamp values
-    if(fomoLevel < 0) fomoLevel = 0;
-    if(fomoLevel > 1) fomoLevel = 1;
-    if(floatingSupply < 0) floatingSupply = 0;
-    if(floatingSupply > 1) floatingSupply = 1;
-
-    // Price drift (Noise)
-    let drift = (Math.random() - 0.5) * 5;
-    // High supply drags price down
-    if(floatingSupply > 0.6) drift -= 2;
-    price += drift;
+    // Limits
+    if(fomo < 0) fomo = 0; if(fomo > 1) fomo = 1;
+    if(supply < 0) supply = 0; if(supply > 1) supply = 1;
 
     updateCandle(now);
     updateUI();
 }
 
-function actionDump() {
-    // SHAKEOUT
-    if(balanceBTC < 1) return;
-    
-    const amountBTC = 2;
-    // Force down
-    price -= price * 0.03; // -3% dump
-    balanceBTC -= amountBTC;
-    balanceUSD += amountBTC * price;
-
-    // MECHANIC: Dump scares away sellers (Reduces Supply)
-    const scareFactor = 0.15; // -15% supply
-    floatingSupply -= scareFactor;
-    
-    // But Dump kills FOMO
-    fomoLevel -= 0.1;
-
-    updateLog("SHAKEOUT! Weak hands leave.", "#da3633");
-    updateCandle(Math.floor(Date.now()/1000));
-    updateUI();
-}
-
 function actionPump() {
-    // PUMP
-    if(balanceUSD < 10000) return;
-
-    // Cost depends on Supply (Resistance)
-    // If Supply is 80%, Pump is weak. If 10%, Pump is strong.
-    const resistance = 1 + (floatingSupply * 5); // 1x to 6x resistance
-    const power = (20000 / resistance); // Price impact
+    if(balanceUSD < 10000) { updateLog("No USD left!", "#da3633"); return; }
     
-    balanceUSD -= 20000;
-    balanceBTC += (20000 / price);
-    price += power;
+    // PUMP EFFECT
+    // 1. Price UP
+    // 2. FOMO UP (Key mechanic)
+    // 3. Supply UP (Side effect)
+    
+    let pumpPower = 15000;
+    
+    // Resistance logic: If supply is high, pump is less effective on price
+    let effectiveness = 1 - (supply * 0.8); // 1.0 to 0.2
+    
+    balanceUSD -= pumpPower;
+    balanceBTC += (pumpPower / price);
+    
+    let priceImpact = (pumpPower / 500) * effectiveness; 
+    price += priceImpact;
 
-    // MECHANIC: Pump attracts Profit Takers (Increases Supply)
-    // The higher the price, the more supply comes in
-    floatingSupply += 0.08; 
+    // MECHANICS
+    fomo += 0.15;   // You ignite the spark
+    supply += 0.08; // But you also attract sellers (Profit Taking)
 
-    updateLog("PUMP! Profit takers entering (+Supply)", "#238636");
+    updateLog("PUMP! FOMO rising, but Supply grows...", "#238636");
+    flashBar('bg-fomo', 'good');
+    
     updateCandle(Math.floor(Date.now()/1000));
     updateUI();
 }
 
+function actionDump() {
+    if(balanceBTC < 1) { updateLog("No BTC to dump!", "#da3633"); return; }
+    
+    // DUMP EFFECT
+    // 1. Price DOWN
+    // 2. Supply DOWN (HUGE DROP - The Goal)
+    // 3. FOMO DOWN (Small drop - The Cost)
+    
+    let dumpAmount = 3; // BTC
+    balanceBTC -= dumpAmount;
+    balanceUSD += dumpAmount * price;
+    
+    price -= price * 0.04; // Hard drop
+
+    // MECHANICS
+    supply -= 0.25; // Shakeout successful!
+    fomo -= 0.05;   // Slight fear, but less than the supply drop
+
+    updateLog("DUMP! Sellers panicked. Path cleared.", "#da3633");
+    flashBar('bg-supply', 'good'); // Good because we want low supply
+    
+    updateCandle(Math.floor(Date.now()/1000));
+    updateUI();
+}
 
 function updateCandle(now) {
     if(price > currentBar.high) currentBar.high = price;
     if(price < currentBar.low) currentBar.low = price;
     currentBar.close = price;
     
-    // Slow candles (10s)
     if (now - currentBar.time > 10) {
          currentBar = { time: now, open: price, high: price, low: price, close: price };
     }
@@ -270,41 +268,36 @@ function updateUI() {
     document.getElementById('ui-usd').innerText = '$' + Math.floor(balanceUSD).toLocaleString();
     document.getElementById('ui-btc').innerText = balanceBTC.toFixed(2);
     
-    // Supply Bar
-    const sPct = Math.floor(floatingSupply * 100);
+    // Bars
+    let sPct = Math.floor(supply * 100);
+    let fPct = Math.floor(fomo * 100);
+    
     document.getElementById('val-supply').innerText = sPct + '%';
     document.getElementById('bar-supply').style.width = sPct + '%';
     
-    // FOMO Bar
-    const fPct = Math.floor(fomoLevel * 100);
     document.getElementById('val-fomo').innerText = fPct + '%';
     document.getElementById('bar-fomo').style.width = fPct + '%';
     
-    // Status
-    const status = document.getElementById('status-text');
-    if(isManiaMode) {
-        status.innerText = "!!! RETAIL MANIA !!!";
-        status.style.color = "#3fb950";
-        document.querySelector('.wrapper').classList.add('mania-active');
+    // Status Text
+    const st = document.getElementById('status-text');
+    if(isMania) {
+        st.innerText = "!!! MANIA MODE !!!";
+        st.style.color = "#3fb950";
     } else {
-        document.querySelector('.wrapper').classList.remove('mania-active');
-        document.body.style.background = "#0b0e11";
-        if(floatingSupply > 0.7) {
-            status.innerText = "TOO MUCH SUPPLY. DUMP IT.";
-            status.style.color = "#da3633";
-        } else if (fomoLevel > 0.5) {
-             status.innerText = "FOMO BUILDING...";
-             status.style.color = "#d29922";
+        if(fomo > supply) {
+            st.innerText = "DEMAND > SUPPLY (RISING)";
+            st.style.color = "#3fb950";
+        } else if (supply > fomo + 0.2) {
+            st.innerText = "SUPPLY WALL (STALLED)";
+            st.style.color = "#da3633";
         } else {
-            status.innerText = "ACCUMULATION PHASE";
-            status.style.color = "#8b949e";
+             st.innerText = "NEUTRAL / CHOPPY";
+             st.style.color = "#8b949e";
         }
     }
 }
 
-// Slow Loop (1 sec)
 setInterval(tick, 1000);
-
 </script>
 </body>
 </html>
