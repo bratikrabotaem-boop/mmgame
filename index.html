@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Market Maker Simulator: Hardcore Mode</title>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+    :root { --bg: #0b0e11; --panel: #15191f; --border: #2a2e39; --green: #0ecb81; --red: #f6465d; --text: #d1d5db; --blue: #2962ff; }
+    body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font-family: 'Roboto', -apple-system, sans-serif;
+        height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    
+    /* LAYOUT */
+    .header { padding: 10px 15px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .title { font-weight: 900; letter-spacing: 1px; color: #fff; font-size: 14px; }
+    .status { font-family: monospace; font-size: 13px; color: var(--green); }
+    
+    .main-area { flex: 1; position: relative; display: flex; flex-direction: column; }
+    #chart-container { flex: 1; width: 100%; }
+    
+    /* HUD INDICATORS */
+    .hud {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+        padding: 10px; background: var(--bg); border-top: 1px solid var(--border);
+    }
+    .bar-container { background: #1e2329; height: 24px; border-radius: 4px; position: relative; overflow: hidden; border: 1px solid var(--border); }
+    .bar-label { position: absolute; left: 10px; top: 0; bottom: 0; display: flex; align-items: center; font-size: 10px; font-weight: 700; z-index: 2; text-shadow: 0 1px 2px black; }
+    .bar-fill { height: 100%; transition: width 0.3s; }
+    
+    #supply-fill { background: linear-gradient(90deg, #ff9800, #f6465d); width: 10%; }
+    #fomo-fill { background: linear-gradient(90deg, #2962ff, #00e5ff); width: 50%; }
+
+    /* DASHBOARD */
+    .dashboard {
+        display: grid; grid-template-columns: 1fr 1fr; 
+        background: var(--panel); padding: 10px; gap: 10px; border-top: 1px solid var(--border);
+    }
+    .stat-box { text-align: center; }
+    .stat-label { font-size: 10px; color: #6b7280; text-transform: uppercase; }
+    .stat-value { font-size: 16px; font-weight: 700; font-family: monospace; color: #fff; }
+
+    /* CONTROLS */
+    .controls {
+        padding: 10px; background: var(--panel); gap: 8px; display: flex; flex-direction: column;
+    }
+    .btn-row { display: flex; gap: 8px; }
+    
+    button {
+        flex: 1; padding: 12px; border: none; border-radius: 4px; 
+        font-weight: 700; cursor: pointer; color: #fff; font-size: 12px;
+        transition: transform 0.1s, filter 0.2s; text-transform: uppercase;
+        position: relative; overflow: hidden;
+    }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-buy { background: var(--green); color: #000; }
+    .btn-sell { background: var(--red); color: #fff; }
+    
+    /* ABILITIES */
+    .btn-skill { background: #2a2e39; border: 1px solid #4a4f5e; color: #a0a6b5; }
+    .btn-skill strong { display: block; color: #f6465d; font-size: 14px; margin-bottom: 2px; }
+    .btn-skill:hover { background: #323642; }
+    .btn-skill.cooldown { background: #181a20; color: #444; border-color: #222; }
+
+    /* NOTIFICATIONS */
+    #msg-overlay {
+        position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+        padding: 6px 12px; background: rgba(0,0,0,0.7); border-radius: 20px;
+        font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.5s;
+        border: 1px solid #444; z-index: 10;
+    }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="title">MM TERMINAL: NO SPOOFING</div>
+    <div class="status" id="market-status">Accumulation Zone</div>
+</div>
+
+<div class="main-area">
+    <div id="msg-overlay">Market Normal</div>
+    <div id="chart-container"></div>
+</div>
+
+<div class="hud">
+    <div class="bar-container">
+        <div class="bar-label">CROWD FOMO</div>
+        <div class="bar-fill" id="fomo-fill"></div>
+    </div>
+    <div class="bar-container">
+        <div class="bar-label">WEAK HANDS (RISK)</div>
+        <div class="bar-fill" id="supply-fill"></div>
+    </div>
+</div>
+
+<div class="dashboard">
+    <div class="stat-box">
+        <div class="stat-label">Liquidity (USDT)</div>
+        <div class="stat-value" id="val-usd" style="color:var(--green)">$1,000,000</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Inventory (BTC)</div>
+        <div class="stat-value" id="val-btc">100.00</div>
+    </div>
+</div>
+
+<div class="controls">
+    <div class="btn-row">
+        <button class="btn-buy" onclick="playerTrade('BUY')">MARKET BUY<br><span style="font-size:9px; opacity:0.7">Build FOMO & Pump</span></button>
+        <button class="btn-sell" onclick="playerTrade('SELL')">MARKET SELL<br><span style="font-size:9px; opacity:0.7">Dump Price</span></button>
+    </div>
+
+    <div class="btn-row">
+        <button class="btn-skill" id="btn-shake" onclick="useSkill('SHAKE')">
+            <strong>SHAKEOUT</strong>
+            CLEAR WEAK HANDS (COST: 1 BTC)
+        </button>
+    </div>
+</div>
+
+<script>
+// --- GAME CONFIG ---
+const CONFIG = {
+    startPrice: 20000,
+    tickTime: 200,      // Game loop speed
+    volatility: 0.15,   // Base market noise
+    supplyLimit: 1000,  // Max supply "points" before crash
+    playerImpact: 50,   // How much 1 trade moves price raw
+};
+
+// --- STATE ---
+let state = {
+    price: CONFIG.startPrice,
+    usd: 1_000_000,
+    btc: 100,
+    fomo: 30,           // 0-100 (Sentiment)
+    supply: 100,        // 0-1000 (Accumulated weak hands)
+    
+    // Skill Cooldowns (frames)
+    cooldownShake: 0
+};
+
+// --- CHART SETUP ---
+const chartContainer = document.getElementById('chart-container');
+const chart = LightweightCharts.createChart(chartContainer, {
+    layout: { background: { color: '#0b0e11' }, textColor: '#6b7280' },
+    grid: { vertLines: { color: '#15191f' }, horzLines: { color: '#15191f' } },
+    timeScale: { timeVisible: true, secondsVisible: true, rightOffset: 5 },
+    rightPriceScale: { borderColor: '#2a2e39' },
+});
+const candleSeries = chart.addCandlestickSeries({
+    upColor: '#0ecb81', downColor: '#f6465d',
+    borderUpColor: '#0ecb81', borderDownColor: '#f6465d',
+    wickUpColor: '#0ecb81', wickDownColor: '#f6465d',
+});
+
+// Resize handler
+window.addEventListener('resize', () => {
+    chart.resize(chartContainer.offsetWidth, chartContainer.offsetHeight);
+});
+
+// --- CORE LOGIC ---
+
+// Helper: Gaussian Random for natural movement
+function randomNorm() {
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random(); 
+    while(v === 0) v = Math.random();
+    return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+}
+
+function updateUI() {
+    document.getElementById('val-usd').innerText = '$' + Math.floor(state.usd).toLocaleString();
+    document.getElementById('val-btc').innerText = state.btc.toFixed(2);
+    
+    // Bars
+    document.getElementById('fomo-fill').style.width = state.fomo + '%';
+    const supplyPct = Math.min(100, (state.supply / CONFIG.supplyLimit) * 100);
+    document.getElementById('supply-fill').style.width = supplyPct + '%';
+    
+    // Color logic for bars
+    document.getElementById('fomo-fill').style.filter = `hue-rotate(${120 - (state.fomo * 1.2)}deg)`; // Blue to Red
+    
+    // Status Text
+    const statusEl = document.getElementById('market-status');
+    if (supplyPct > 90) { statusEl.innerText = "CRASH IMMINENT"; statusEl.style.color = "red"; }
+    else if (state.fomo > 80) { statusEl.innerText = "MANIC EUPHORIA"; statusEl.style.color = "#0ecb81"; }
+    else if (state.fomo < 20) { statusEl.innerText = "EXTREME FEAR"; statusEl.style.color = "#2962ff"; }
+    else { statusEl.innerText = "Ranging"; statusEl.style.color = "#888"; }
+
+    // Buttons
+    const btnShake = document.getElementById('btn-shake');
+    if(state.cooldownShake > 0) {
+        btnShake.classList.add('cooldown'); btnShake.disabled = true;
+        btnShake.querySelector('strong').innerText = `WAIT ${Math.ceil(state.cooldownShake/5)}s`;
+    } else {
+        btnShake.classList.remove('cooldown'); btnShake.disabled = false;
+        btnShake.querySelector('strong').innerText = "SHAKEOUT";
+    }
+}
+
+function showMsg(text, color = '#fff') {
+    const el = document.getElementById('msg-overlay');
+    el.innerText = text;
+    el.style.color = color;
+    el.style.opacity = 1;
+    setTimeout(() => el.style.opacity = 0, 2000);
+}
+
+// --- TRADING MECHANICS ---
+
+function playerTrade(side) {
+    const tradeSizeUSD = 50000; 
+    
+    if (side === 'BUY') {
+        if (state.usd < tradeSizeUSD) return showMsg("NO LIQUIDITY (USDT)!", "red");
+        
+        state.usd -= tradeSizeUSD;
+        const amount = tradeSizeUSD / state.price;
+        state.btc += amount;
+        
+        // Buying moves price and generates FOMO directly now (since spoofing is gone)
+        // I slightly buffed the FOMO gain from buying to balance the game
+        state.price += (state.price * 0.005); 
+        state.fomo = Math.min(100, state.fomo + 4); // +4 FOMO (was +2)
+        
+    } else {
+        const amount = tradeSizeUSD / state.price;
+        if (state.btc < amount) return showMsg("NO INVENTORY (BTC)!", "red");
+        
+        state.btc -= amount;
+        state.usd += tradeSizeUSD;
+        
+        state.price -= (state.price * 0.007); 
+        state.fomo = Math.max(0, state.fomo - 3);
+    }
+}
+
+function useSkill(type) {
+    if (type === 'SHAKE') {
+        // Shakeout: Spend BTC to nuke Supply
+        if (state.btc < 1) return showMsg("Need BTC for Shakeout", "red");
+        
+        state.cooldownShake = 50; // ~10 seconds
+        state.btc -= 1; // Cost
+        
+        const dumpPower = 0.035; // 3.5% instant drop
+        state.price -= state.price * dumpPower;
+        
+        // Massive reduction in weak hands
+        state.supply = Math.max(0, state.supply - 350);
+        state.fomo = Math.max(0, state.fomo - 15);
+        
+        showMsg("STOP LOSS HUNTING!", "#f6465d");
+    }
+}
+
+// --- CROWD AI ---
+function processCrowd() {
+    state.cooldownShake = Math.max(0, state.cooldownShake - 1);
+
+    // Risk accumulation
+    if (state.fomo > 60) {
+        state.supply += 2; 
+    }
+    
+    // Crowd Reaction
+    let crowdAction = 0; // Negative = Sell, Positive = Buy
+    
+    if (state.fomo > 70) {
+        crowdAction = (state.fomo - 60) * 0.5; 
+        state.supply += 3; 
+    } else if (state.fomo < 30) {
+        crowdAction = -((30 - state.fomo) * 0.8);
+        state.supply = Math.max(0, state.supply - 2); 
+    }
+    
+    // CRASH MECHANIC
+    if (state.supply >= CONFIG.supplyLimit) {
+        showMsg("SUPPLY OVERLOAD: CASCADE DUMP!", "red");
+        crowdAction = -100; 
+        state.supply -= 50; 
+        state.fomo = Math.max(0, state.fomo - 20); 
+    }
+
+    // Apply Price Move
+    const noise = randomNorm() * (state.price * 0.001); 
+    const trend = crowdAction * (state.price * 0.0005);
+    
+    state.price = state.price + trend + noise;
+    
+    // Natural FOMO Decay
+    if (Math.random() > 0.9) state.fomo = Math.max(0, state.fomo - 1);
+}
+
+// --- GAME LOOP ---
+let currentCandle = null;
+let lastCandleTime = 0;
+
+function updateCandle() {
+    const now = Math.floor(Date.now() / 1000);
+    const timeFrame = 2; 
+    const candleTime = Math.floor(now / timeFrame) * timeFrame;
+
+    if (!currentCandle || candleTime > lastCandleTime) {
+        lastCandleTime = candleTime;
+        currentCandle = {
+            time: candleTime,
+            open: state.price,
+            high: state.price,
+            low: state.price,
+            close: state.price
+        };
+    }
+
+    if (state.price > currentCandle.high) currentCandle.high = state.price;
+    if (state.price < currentCandle.low) currentCandle.low = state.price;
+    currentCandle.close = state.price;
+
+    candleSeries.update(currentCandle);
+    
+    const logicalRange = chart.timeScale().getVisibleLogicalRange();
+    if (logicalRange !== null) {
+        const barsInfo = candleSeries.barsInLogicalRange(logicalRange);
+        if (barsInfo !== null && barsInfo.barsAfter < 0) {
+             chart.timeScale().scrollToRealTime();
+        }
+    }
+}
+
+function gameLoop() {
+    processCrowd();
+    updateCandle();
+    updateUI();
+}
+
+setInterval(gameLoop, CONFIG.tickTime);
+
+</script>
+</body>
+</html>
