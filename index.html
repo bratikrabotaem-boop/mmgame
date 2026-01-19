@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Market Maker: Liquidity Hunter</title>
+<title>Market Maker: The Struggle</title>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
     body { margin: 0; background: #0b0e11; color: #c9d1d9; font-family: 'Roboto Mono', monospace; overflow-y: auto; -webkit-tap-highlight-color: transparent; }
@@ -12,7 +12,17 @@
     /* HUD */
     .header { text-align: center; margin-bottom: 15px; }
     h3 { margin: 5px 0; color: #f0f6fc; text-transform: uppercase; letter-spacing: 1px; }
-    .status-text { font-size: 11px; color: #8b949e; height: 15px;}
+    .status-text { font-size: 11px; color: #8b949e; height: 15px; font-weight: bold;}
+
+    /* BARS */
+    .bar-container { margin-bottom: 12px; }
+    .bar-label-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+    .bar-bg { width: 100%; height: 10px; background: #21262d; border-radius: 4px; overflow: hidden; position: relative; }
+    
+    /* Supply Bar (Bad) */
+    .fill-supply { height: 100%; background: #da3633; width: 50%; transition: width 0.5s ease-out; }
+    /* FOMO Bar (Good) */
+    .fill-fomo { height: 100%; background: #238636; width: 0%; transition: width 0.5s ease-out; box-shadow: 0 0 10px #238636; }
 
     .stats-grid {
         display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
@@ -22,60 +32,55 @@
         display: flex; flex-direction: column; justify-content: space-between;
     }
     .stat-label { font-size: 10px; color: #8b949e; text-transform: uppercase; }
-    .stat-val { font-size: 16px; font-weight: 700; color: #f0f6fc; }
+    .stat-val { font-size: 15px; font-weight: 700; color: #f0f6fc; }
     .usd { color: #3fb950; }
-    .btc { color: #f0f6fc; }
-
-    /* SUPPLY BAR */
-    .supply-container {
-        background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px; margin-bottom: 10px;
-    }
-    .supply-header { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px; }
-    .bar-bg { width: 100%; height: 12px; background: #21262d; border-radius: 6px; overflow: hidden; position: relative; }
-    .bar-fill { height: 100%; background: linear-gradient(90deg, #d29922, #db6d28); width: 85%; transition: width 0.3s; }
-    .bar-marker { position: absolute; left: 30%; top:0; bottom:0; width: 2px; background: #3fb950; opacity: 0.5; }
     
-    /* CHARTS */
-    .chart-box { border: 1px solid #30363d; background: #0d1117; height: 280px; margin-bottom: 15px; border-radius: 6px; overflow: hidden; }
+    .chart-box { border: 1px solid #30363d; background: #0d1117; height: 260px; margin-bottom: 15px; border-radius: 6px; overflow: hidden; }
     #chart { width: 100%; height: 100%; }
 
-    /* CONTROLS */
-    .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     button {
-        padding: 15px 5px; border: none; border-radius: 6px; font-weight: 700; font-family: inherit; font-size: 13px;
-        cursor: pointer; color: #fff; transition: all 0.1s; display: flex; flex-direction: column; align-items: center;
-        border-bottom: 3px solid rgba(0,0,0,0.3);
+        padding: 18px 5px; border: none; border-radius: 6px; font-weight: 700; font-family: inherit; font-size: 14px;
+        cursor: pointer; color: #fff; transition: transform 0.1s;
+        border-bottom: 4px solid rgba(0,0,0,0.2);
     }
-    button:active { transform: translateY(2px); border-bottom: 1px solid rgba(0,0,0,0.3); }
-    .btn-sub { font-size: 9px; font-weight: 400; opacity: 0.8; margin-top: 2px; }
+    button:active { transform: translateY(2px); border-bottom: 1px solid rgba(0,0,0,0.2); }
+    
+    .btn-dump { background: #da3633; } 
+    .btn-pump { background: #238636; } 
+    .sub-btn { display: block; font-size: 10px; font-weight: 400; opacity: 0.8; margin-top: 2px;}
 
-    .btn-dump { background: #da3633; color: #fff; } /* Red */
-    .btn-pump { background: #238636; color: #fff; } /* Green */
-    .btn-trap { background: #d29922; color: #1f1f1f; } /* Yellow/Orange */
-
-    /* LOGS */
     #log { font-size: 10px; color: #8b949e; text-align: center; margin-top: 10px; height: 20px; }
+    
+    .mania-active { animation: pulse 1s infinite; border: 2px solid #fff; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(35, 134, 54, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(35, 134, 54, 0); } 100% { box-shadow: 0 0 0 0 rgba(35, 134, 54, 0); } }
 </style>
 </head>
 <body>
 
 <div class="wrapper">
     <div class="header">
-        <h3>Liquidity Hunter</h3>
-        <div class="status-text">PHASE: <span id="phase-display">ANALYSIS</span></div>
+        <h3>LIQUIDITY WARS</h3>
+        <div class="status-text" id="status-text">MARKET QUIET</div>
     </div>
 
-    <div class="supply-container">
-        <div class="supply-header">
-            <span class="stat-label">Floating Supply (Weak Hands)</span>
-            <span class="stat-val" id="ui-supply">85%</span>
+    <div class="bar-container">
+        <div class="bar-label-row">
+            <span class="stat-label">FLOATING SUPPLY (SELLERS)</span>
+            <span class="stat-val" style="font-size:12px" id="val-supply">50%</span>
         </div>
         <div class="bar-bg">
-            <div class="bar-marker" title="Safe Zone"></div>
-            <div class="bar-fill" id="supply-bar"></div>
+            <div class="fill-supply" id="bar-supply"></div>
         </div>
-        <div class="stat-label" style="margin-top:4px; font-size: 9px; color: #8b949e;">
-            * High Supply = Hard to Pump. Shake them out!
+    </div>
+
+    <div class="bar-container">
+        <div class="bar-label-row">
+            <span class="stat-label">RETAIL FOMO (TARGET)</span>
+            <span class="stat-val" style="font-size:12px" id="val-fomo">0%</span>
+        </div>
+        <div class="bar-bg">
+            <div class="fill-fomo" id="bar-fomo"></div>
         </div>
     </div>
 
@@ -86,7 +91,7 @@
         </div>
         <div class="stat-card">
             <span class="stat-label">INVENTORY (BTC)</span>
-            <span class="stat-val btc" id="ui-btc">50.00</span>
+            <span class="stat-val" id="ui-btc">50.00</span>
         </div>
     </div>
 
@@ -94,34 +99,30 @@
 
     <div class="controls">
         <button class="btn-dump" onclick="actionDump()">
-            DUMP
-            <span class="btn-sub">SHAKEOUT</span>
-        </button>
-        <button class="btn-trap" onclick="actionTrap()">
-            BULL TRAP
-            <span class="btn-sub">LURE BUYERS</span>
+            DUMP (SHAKEOUT)
+            <span class="sub-btn">Scare Sellers (-Supply)</span>
         </button>
         <button class="btn-pump" onclick="actionPump()">
-            PUMP
-            <span class="btn-sub">MARK UP</span>
+            PUMP (MARK UP)
+            <span class="sub-btn">Raise Price (+Supply)</span>
         </button>
     </div>
-    <div id="log">Market is quiet...</div>
+    <div id="log">...</div>
 </div>
 
 <script>
 // --- CONFIGURATION ---
-const TIMEFRAME_SEC = 60; 
 let balanceUSD = 1000000;
 let balanceBTC = 50;
 let price = 1000;
+const START_PRICE = 1000;
 
 // GAME STATE
-let floatingSupply = 0.85; // 85% монет в слабых руках. Главный враг.
-let crowdFOMO = 0;         // Жадность толпы (0-100)
-let isTrapActive = false;
+let floatingSupply = 0.50; // 50% start
+let fomoLevel = 0.0;       // 0 to 1.0
+let isManiaMode = false;   // The Win State
 
-// CHART SETUP
+// CHART
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
     layout: { background: { color: '#0d1117' }, textColor: '#8b949e' },
     grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
@@ -135,174 +136,174 @@ const candleSeries = chart.addCandlestickSeries({
 let currentBar = { time: Math.floor(Date.now()/1000), open: price, high: price, low: price, close: price };
 candleSeries.update(currentBar);
 
-// --- CORE MECHANICS ---
+// --- LOGIC ---
 
-// 1. DYNAMIC RESISTANCE (Главная формула)
-function getResistances() {
-    // Чем больше Floating Supply, тем тяжелее пампить (Up Resistance выше)
-    // Supply 85% -> Up Res ~ 1000 (Очень тяжело)
-    // Supply 10% -> Up Res ~ 50 (Летит само)
-    const upRes = 50 + (floatingSupply * 2000); 
-    
-    // Вниз падать легко, если Supply высокий (паник селл)
-    // Но если Supply низкий (мы всех вытряхнули), вниз продавить сложнее (дефицит)
-    const downRes = 200 + ((1 - floatingSupply) * 1000); 
-    
-    return { up: upRes, down: downRes };
-}
-
-function updateLog(msg, color='#8b949e') {
+function updateLog(msg, color) {
     const el = document.getElementById('log');
     el.innerText = msg;
-    el.style.color = color;
+    if(color) el.style.color = color;
 }
 
+// THE CORE LOOP (1 Second Tick)
 function tick() {
-    // Crowd Logic (Background noise)
-    const res = getResistances();
-    let move = (Math.random() - 0.5) * 2; // -1 to 1
-
-    // Если высокий Supply, рынок тяготеет вниз (Selling pressure)
-    if(floatingSupply > 0.5) move -= 0.5;
+    const now = Math.floor(Date.now()/1000);
     
-    // Если активирована ловушка (FOMO), толпа покупает
-    if(crowdFOMO > 0) {
-        move += (crowdFOMO / 10); 
-        crowdFOMO -= 2; // FOMO затухает
-        if(crowdFOMO < 0) crowdFOMO = 0;
+    // 1. MANIA MODE (Auto-Win logic)
+    if(isManiaMode) {
+        // Толпа покупает у тебя сама!
+        const autoBuy = 2; // BTC
+        if(balanceBTC >= autoBuy) {
+            balanceBTC -= autoBuy;
+            balanceUSD += autoBuy * price;
+            // Цена растет сама по инерции
+            price += price * 0.01;
+            updateLog("MANIA MODE! RETAIL IS BUYING EVERYTHING!", "#238636");
+        } else {
+            isManiaMode = false;
+            updateLog("Sold out! Mania ended.", "#8b949e");
+        }
+        fomoLevel -= 0.05; // Mania burns out
+        if(fomoLevel <= 0) isManiaMode = false;
+    } 
+    else {
+        // 2. NORMAL MARKET PHYSICS
+        
+        // PASSIVE SUPPLY REGEN (Sellers return if boring)
+        if(floatingSupply < 0.8) {
+            floatingSupply += 0.005; 
+        }
+
+        // FOMO CALCULATION
+        // FOMO grows if: Price is High AND Supply is Low
+        const priceGain = (price - START_PRICE) / START_PRICE; // e.g. 0.10 (10%)
+        
+        if (priceGain > 0.05 && floatingSupply < 0.3) {
+            fomoLevel += 0.02;
+            updateLog("FOMO building... Keep Supply low!", "#d29922");
+        } else {
+            // FOMO decays if Supply is high (Fear/Resistance)
+            fomoLevel -= 0.01;
+            if(fomoLevel > 0) updateLog("FOMO dying... Too many sellers!", "#8b949e");
+        }
+
+        // Trigger MANIA
+        if(fomoLevel >= 1.0 && !isManiaMode) {
+            isManiaMode = true;
+            document.body.style.background = "#0f1e13"; // Green tint
+        }
     }
 
-    // Применяем движение к цене
-    if (move > 0) price += move * (1000 / res.up); 
-    else price += move * (1000 / res.down);
+    // Clamp values
+    if(fomoLevel < 0) fomoLevel = 0;
+    if(fomoLevel > 1) fomoLevel = 1;
+    if(floatingSupply < 0) floatingSupply = 0;
+    if(floatingSupply > 1) floatingSupply = 1;
 
-    updateCandle();
+    // Price drift (Noise)
+    let drift = (Math.random() - 0.5) * 5;
+    // High supply drags price down
+    if(floatingSupply > 0.6) drift -= 2;
+    price += drift;
+
+    updateCandle(now);
     updateUI();
-    
-    // Авто-восстановление Supply (со временем люди снова покупают)
-    if(Math.random() < 0.05 && floatingSupply < 0.9) {
-        floatingSupply += 0.005;
-    }
 }
-
-// --- PLAYER ACTIONS ---
 
 function actionDump() {
-    // SHAKEOUT: Продаем свои BTC, чтобы обвалить цену и напугать толпу
-    const amountBTC = 5; 
-    if(balanceBTC < amountBTC) { updateLog("Not enough BTC to dump!", "#da3633"); return; }
+    // SHAKEOUT
+    if(balanceBTC < 1) return;
     
-    const res = getResistances();
-    // Эффективность дампа зависит от Supply. Если Supply много, дамп вызывает цепную реакцию.
-    const impact = (amountBTC * price) / (res.down * 0.5); 
-    
+    const amountBTC = 2;
+    // Force down
+    price -= price * 0.03; // -3% dump
     balanceBTC -= amountBTC;
     balanceUSD += amountBTC * price;
-    price -= impact;
 
-    // KEY MECHANIC: Shakeout reduces floating supply
-    // Чем сильнее падение, тем больше слабых рук выходят
-    const panicFactor = 0.05 + (Math.random() * 0.05); 
-    if(floatingSupply > 0.1) {
-        floatingSupply -= panicFactor; 
-        updateLog(`SHAKEOUT! Weak hands fleeing. Supply: -${(panicFactor*100).toFixed(1)}%`, "#da3633");
-    } else {
-        updateLog("Selling into empty void. No sellers left.", "#da3633");
-    }
+    // MECHANIC: Dump scares away sellers (Reduces Supply)
+    const scareFactor = 0.15; // -15% supply
+    floatingSupply -= scareFactor;
     
-    updateCandle();
+    // But Dump kills FOMO
+    fomoLevel -= 0.1;
+
+    updateLog("SHAKEOUT! Weak hands leave.", "#da3633");
+    updateCandle(Math.floor(Date.now()/1000));
     updateUI();
 }
 
 function actionPump() {
-    // PUMP: Покупаем за USDT
-    const amountUSD = 10000;
-    if(balanceUSD < amountUSD) { updateLog("Out of Cash!", "#da3633"); return; }
+    // PUMP
+    if(balanceUSD < 10000) return;
 
-    const res = getResistances();
-    const impact = amountUSD / res.up;
+    // Cost depends on Supply (Resistance)
+    // If Supply is 80%, Pump is weak. If 10%, Pump is strong.
+    const resistance = 1 + (floatingSupply * 5); // 1x to 6x resistance
+    const power = (20000 / resistance); // Price impact
+    
+    balanceUSD -= 20000;
+    balanceBTC += (20000 / price);
+    price += power;
 
-    balanceUSD -= amountUSD;
-    balanceBTC += amountUSD / price;
-    price += impact;
+    // MECHANIC: Pump attracts Profit Takers (Increases Supply)
+    // The higher the price, the more supply comes in
+    floatingSupply += 0.08; 
 
-    // Feedback
-    if(floatingSupply > 0.6) {
-        updateLog("Pumping against Resistance! Costly!", "#d29922");
-    } else {
-        updateLog("PUMP IT! Price flying on low liquidity.", "#3fb950");
-    }
-
-    updateCandle();
+    updateLog("PUMP! Profit takers entering (+Supply)", "#238636");
+    updateCandle(Math.floor(Date.now()/1000));
     updateUI();
 }
 
-function actionTrap() {
-    // BULL TRAP: Резкий рывок вверх, чтобы создать FOMO
-    // Тратим деньги, но не получаем BTC (условно сжигаем на комиссии/маркетмейкинг ради графика)
-    const cost = 5000;
-    if(balanceUSD < cost) { updateLog("Need cash for trap!", "#da3633"); return; }
-    
-    balanceUSD -= cost;
-    
-    // Искусственный спайк цены
-    price += price * 0.02; 
-    
-    // Trigger FOMO
-    crowdFOMO = 100; 
-    isTrapActive = true;
-    
-    updateLog("BULL TRAP ACTIVATED! Retail is buying! DUMP NOW!", "#d29922");
-    setTimeout(() => { isTrapActive = false; }, 3000);
-    
-    updateCandle();
-    updateUI();
-}
 
-// --- ENGINE ---
-
-function updateCandle() {
-    // New minute handling
-    const now = Math.floor(Date.now()/1000);
-    /* Для плавности симуляции мы обновляем текущую свечу, 
-       но не создаем новую каждую секунду, а раз в N секунд или просто обновляем текущую
-       в рамках демо упростим до "вечной свечи", которая сдвигается раз в 5 сек
-    */
-   
-    // High/Low logic
+function updateCandle(now) {
     if(price > currentBar.high) currentBar.high = price;
     if(price < currentBar.low) currentBar.low = price;
     currentBar.close = price;
     
-    // Reset bar occasionally for visual flow
-    if (now - currentBar.time > 5) {
+    // Slow candles (10s)
+    if (now - currentBar.time > 10) {
          currentBar = { time: now, open: price, high: price, low: price, close: price };
     }
-    
     candleSeries.update(currentBar);
 }
 
 function updateUI() {
     document.getElementById('ui-usd').innerText = '$' + Math.floor(balanceUSD).toLocaleString();
     document.getElementById('ui-btc').innerText = balanceBTC.toFixed(2);
-    document.getElementById('ui-supply').innerText = Math.floor(floatingSupply * 100) + '%';
     
-    // Supply Bar Visual
-    const bar = document.getElementById('supply-bar');
-    bar.style.width = (floatingSupply * 100) + '%';
+    // Supply Bar
+    const sPct = Math.floor(floatingSupply * 100);
+    document.getElementById('val-supply').innerText = sPct + '%';
+    document.getElementById('bar-supply').style.width = sPct + '%';
     
-    if(floatingSupply > 0.6) bar.style.background = '#da3633'; // High danger
-    else if(floatingSupply > 0.3) bar.style.background = '#d29922'; // Med
-    else bar.style.background = '#3fb950'; // Low (Good for pump)
-
-    // Phase Text
-    const phaseEl = document.getElementById('phase-display');
-    if(floatingSupply > 0.5) phaseEl.innerText = "1. SHAKEOUT NEEDED";
-    else if(crowdFOMO > 50) phaseEl.innerText = "3. DISTRIBUTE NOW!";
-    else phaseEl.innerText = "2. READY TO PUMP";
+    // FOMO Bar
+    const fPct = Math.floor(fomoLevel * 100);
+    document.getElementById('val-fomo').innerText = fPct + '%';
+    document.getElementById('bar-fomo').style.width = fPct + '%';
+    
+    // Status
+    const status = document.getElementById('status-text');
+    if(isManiaMode) {
+        status.innerText = "!!! RETAIL MANIA !!!";
+        status.style.color = "#3fb950";
+        document.querySelector('.wrapper').classList.add('mania-active');
+    } else {
+        document.querySelector('.wrapper').classList.remove('mania-active');
+        document.body.style.background = "#0b0e11";
+        if(floatingSupply > 0.7) {
+            status.innerText = "TOO MUCH SUPPLY. DUMP IT.";
+            status.style.color = "#da3633";
+        } else if (fomoLevel > 0.5) {
+             status.innerText = "FOMO BUILDING...";
+             status.style.color = "#d29922";
+        } else {
+            status.innerText = "ACCUMULATION PHASE";
+            status.style.color = "#8b949e";
+        }
+    }
 }
 
-setInterval(tick, 200);
+// Slow Loop (1 sec)
+setInterval(tick, 1000);
 
 </script>
 </body>
